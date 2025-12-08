@@ -66,7 +66,7 @@ jobs:
       run: |
         cd target/${{ matrix.target }}/release
         7z a ${{ matrix.asset_name }}.${{ matrix.archive_ext }} ${{ matrix.artifact_name }}
-        mv ${{ matrix.asset_name }}.${{ matrix.archive_ext }} ${{ github.workspace }}/
+        mv ${{ matrix.asset_name }}.${{ matrix.archive_ext }} "$GITHUB_WORKSPACE/"
       shell: bash
 
     - name: Generate release tag
