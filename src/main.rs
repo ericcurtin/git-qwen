@@ -4,6 +4,8 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::path::PathBuf;
 
+const QWEN_PROMPT: &str = "Generate a concise git commit message for the following changes. Only output the commit message, nothing else:\n\n";
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     
@@ -134,7 +136,7 @@ fn generate_commit_message(diff: &str) -> Result<String, String> {
 
     // Write the prompt to qwen's stdin
     if let Some(mut stdin) = child.stdin.take() {
-        let prompt = format!("Generate a concise git commit message for the following changes. Only output the commit message, nothing else:\n\n{}", diff);
+        let prompt = format!("{}{}", QWEN_PROMPT, diff);
         stdin.write_all(prompt.as_bytes())
             .map_err(|e| format!("Failed to write to qwen stdin: {}", e))?;
     }
@@ -246,8 +248,8 @@ fn open_editor(editor: &str, file_path: &PathBuf) -> Result<(), String> {
 }
 
 fn cleanup_temp_file(path: &PathBuf) {
-    // Try to clean up the temporary file, but ignore errors
-    // (the file might be needed by git or already deleted)
+    // Try to clean up the temporary file, ignoring errors if it was
+    // already deleted or is inaccessible for any reason
     let _ = fs::remove_file(path);
 }
 
