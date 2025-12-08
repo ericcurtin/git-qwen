@@ -8,12 +8,26 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     
     // Check if user wants to skip the qwen generation (e.g., --amend, --fixup, etc.)
-    let skip_generation = args.iter().any(|arg| {
-        arg == "--amend" || arg == "--fixup" || arg == "--squash" || 
-        arg.starts_with("--fixup=") || arg.starts_with("--squash=") ||
-        arg == "-m" || arg == "--message" || arg == "-F" || arg == "--file" ||
-        arg == "-C" || arg == "--reuse-message" || arg == "-c" || arg == "--reedit-message" ||
-        arg == "--help" || arg == "-h" || arg == "--version"
+    let skip_generation = args.iter().enumerate().any(|(i, arg)| {
+        // Flags that don't take values
+        if arg == "--amend" || arg == "--fixup" || arg == "--squash" || 
+           arg == "--help" || arg == "-h" || arg == "--version" {
+            return true;
+        }
+        
+        // Flags with values (can be --flag=value or --flag value)
+        if arg.starts_with("--fixup=") || arg.starts_with("--squash=") ||
+           arg.starts_with("--message=") || arg.starts_with("--file=") ||
+           arg.starts_with("--reuse-message=") || arg.starts_with("--reedit-message=") {
+            return true;
+        }
+        
+        // Short flags that take values: check if there's a next argument
+        if (arg == "-m" || arg == "-F" || arg == "-C" || arg == "-c") && i + 1 < args.len() {
+            return true;
+        }
+        
+        false
     });
 
     if skip_generation {
@@ -232,8 +246,8 @@ fn open_editor(editor: &str, file_path: &PathBuf) -> Result<(), String> {
 }
 
 fn cleanup_temp_file(path: &PathBuf) {
-    // Don't actually delete COMMIT_EDITMSG as git may need it
-    // Just ignore errors if it doesn't exist
+    // Try to clean up the temporary file, but ignore errors
+    // (the file might be needed by git or already deleted)
     let _ = fs::remove_file(path);
 }
 
