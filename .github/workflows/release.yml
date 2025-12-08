@@ -21,6 +21,11 @@ jobs:
             artifact_name: git-qwen
             asset_name: git-qwen-linux-x86_64
             archive_ext: tar.gz
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact_name: git-qwen
+            asset_name: git-qwen-linux-aarch64
+            archive_ext: tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: git-qwen
@@ -74,11 +79,9 @@ jobs:
       run: |
         if [[ "${{ github.ref }}" == refs/tags/* ]]; then
           echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          echo "prerelease=false" >> $GITHUB_OUTPUT
         else
           SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
           echo "tag=dev-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "prerelease=true" >> $GITHUB_OUTPUT
         fi
       shell: bash
 
@@ -87,6 +90,5 @@ jobs:
       with:
         tag_name: ${{ steps.tag.outputs.tag }}
         name: ${{ steps.tag.outputs.tag }}
-        prerelease: ${{ steps.tag.outputs.prerelease }}
         files: ./${{ matrix.asset_name }}.${{ matrix.archive_ext }}
         token: ${{ secrets.GITHUB_TOKEN }}
