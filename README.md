@@ -6,6 +6,12 @@ A tool that automatically generates git commit messages using `qwen -y`.
 
 `git-qwen` is a wrapper around `git commit` that uses the Qwen AI model to automatically generate commit messages based on your staged changes. It opens a text editor (just like `git commit`) with a pre-populated message that you can edit before committing.
 
+## Install
+
+```
+curl -fsSL https://raw.githubusercontent.com/ericcurtin/git-qwen/main/install.sh | bash
+```
+
 ## Prerequisites
 
 - git
