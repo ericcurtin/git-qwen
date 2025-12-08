@@ -236,7 +236,7 @@ fn get_signoff_line() -> Result<String, String> {
         .trim()
         .to_string();
 
-    Ok(format!("Signed-off-by: {} <{}>", name, email))
+    Ok(format!("Signed-off-by: {} <{}>\n", name, email))
 }
 
 fn create_commit_msg_file(message: &str, include_signoff: bool) -> Result<PathBuf, String> {
