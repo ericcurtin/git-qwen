@@ -171,13 +171,25 @@ fn create_commit_msg_file(message: &str) -> Result<PathBuf, String> {
 
     if status_output.status.success() {
         let status = String::from_utf8_lossy(&status_output.stdout);
+        
+        // Get current branch name
+        let branch_output = Command::new("git")
+            .args(&["branch", "--show-current"])
+            .output()
+            .ok();
+        
+        let branch_name = branch_output
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| "detached HEAD".to_string());
+        
         writeln!(file, "\n# Please enter the commit message for your changes. Lines starting")
             .map_err(|e| format!("Failed to write to file: {}", e))?;
         writeln!(file, "# with '#' will be ignored, and an empty message aborts the commit.")
             .map_err(|e| format!("Failed to write to file: {}", e))?;
         writeln!(file, "#")
             .map_err(|e| format!("Failed to write to file: {}", e))?;
-        writeln!(file, "# On branch...")
+        writeln!(file, "# On branch {}", branch_name)
             .map_err(|e| format!("Failed to write to file: {}", e))?;
         writeln!(file, "# Changes to be committed:")
             .map_err(|e| format!("Failed to write to file: {}", e))?;
@@ -230,7 +242,10 @@ fn execute_git_commit(args: &[String]) {
         .arg("commit")
         .args(args)
         .status()
-        .expect("Failed to execute git commit");
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to execute git commit: {}", e);
+            std::process::exit(1);
+        });
 
     std::process::exit(status.code().unwrap_or(1));
 }
@@ -242,7 +257,10 @@ fn execute_git_commit_with_message(message: &str, additional_args: &[String]) {
         .arg(message)
         .args(additional_args)
         .status()
-        .expect("Failed to execute git commit");
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to execute git commit: {}", e);
+            std::process::exit(1);
+        });
 
     std::process::exit(status.code().unwrap_or(1));
 }
