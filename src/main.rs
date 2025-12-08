@@ -38,8 +38,11 @@ fn main() {
         return;
     }
 
+    // Check if -a or --all flag is present (commit all tracked modified files)
+    let include_all = args.iter().any(|arg| arg == "-a" || arg == "--all");
+
     // Get git diff to generate commit message
-    let diff_output = match get_git_diff() {
+    let diff_output = match get_git_diff(include_all) {
         Ok(output) => output,
         Err(e) => {
             eprintln!("Error: Failed to get git diff: {}", e);
@@ -48,8 +51,13 @@ fn main() {
     };
 
     if diff_output.trim().is_empty() {
-        eprintln!("Error: No changes staged for commit.");
-        eprintln!("Use 'git add' to stage changes.");
+        if include_all {
+            eprintln!("Error: No changes to commit.");
+            eprintln!("Nothing to commit (no modified tracked files).");
+        } else {
+            eprintln!("Error: No changes staged for commit.");
+            eprintln!("Use 'git add' to stage changes, or use '-a' to commit all modified tracked files.");
+        }
         std::process::exit(1);
     }
 
@@ -110,19 +118,45 @@ fn main() {
     execute_git_commit_with_message(&trimmed_msg, &args[1..]);
 }
 
-fn get_git_diff() -> Result<String, String> {
-    // Get staged changes
-    let output = Command::new("git")
-        .args(&["diff", "--cached"])
-        .output()
-        .map_err(|e| format!("Failed to execute git diff: {}", e))?;
+fn get_git_diff(include_all: bool) -> Result<String, String> {
+    if include_all {
+        // When -a flag is used, we need to show what would be committed:
+        // both staged changes AND unstaged changes to tracked files
+        let staged = Command::new("git")
+            .args(&["diff", "--cached"])
+            .output()
+            .map_err(|e| format!("Failed to execute git diff --cached: {}", e))?;
 
-    if !output.status.success() {
-        return Err("git diff command failed".to_string());
+        let unstaged = Command::new("git")
+            .args(&["diff"])
+            .output()
+            .map_err(|e| format!("Failed to execute git diff: {}", e))?;
+
+        if !staged.status.success() || !unstaged.status.success() {
+            return Err("git diff command failed".to_string());
+        }
+
+        let staged_str = String::from_utf8(staged.stdout)
+            .map_err(|e| format!("Invalid UTF-8 in git diff output: {}", e))?;
+        let unstaged_str = String::from_utf8(unstaged.stdout)
+            .map_err(|e| format!("Invalid UTF-8 in git diff output: {}", e))?;
+
+        // Combine both diffs
+        Ok(format!("{}{}", staged_str, unstaged_str))
+    } else {
+        // Get only staged changes
+        let output = Command::new("git")
+            .args(&["diff", "--cached"])
+            .output()
+            .map_err(|e| format!("Failed to execute git diff: {}", e))?;
+
+        if !output.status.success() {
+            return Err("git diff command failed".to_string());
+        }
+
+        String::from_utf8(output.stdout)
+            .map_err(|e| format!("Invalid UTF-8 in git diff output: {}", e))
     }
-
-    String::from_utf8(output.stdout)
-        .map_err(|e| format!("Invalid UTF-8 in git diff output: {}", e))
 }
 
 fn generate_commit_message(diff: &str) -> Result<String, String> {

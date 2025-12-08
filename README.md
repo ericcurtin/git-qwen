@@ -1,6 +1,6 @@
 # git-qwen
 
-A Rust tool that automatically generates git commit messages using `qwen -y`.
+A tool that automatically generates git commit messages using `qwen -y`.
 
 ## Overview
 
@@ -8,20 +8,13 @@ A Rust tool that automatically generates git commit messages using `qwen -y`.
 
 ## Prerequisites
 
-- Rust toolchain (for building)
-- Git
-- `qwen` command-line tool with `-y` flag support
+- git
+- `qwen` command-line tool
 
 ## Installation
 
 ```bash
 cargo build --release
-sudo cp target/release/git-qwen /usr/local/bin/
-```
-
-Or install directly from the repository:
-
-```bash
 cargo install --path .
 ```
 
@@ -84,6 +77,3 @@ $ git-qwen
 # The commit is created with your message
 ```
 
-## License
-
-See [LICENSE](LICENSE) file.
