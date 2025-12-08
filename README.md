@@ -37,10 +37,9 @@ git-qwen --dry-run
 
 ## How It Works
 
-1. **Checks for staged changes**: Ensures you have changes ready to commit
-2. **Generates message**: Runs `qwen -y` with your git diff to generate a commit message
-3. **Opens editor**: Opens your preferred text editor with the generated message
-4. **Commits**: After you save and close the editor, commits with the message
+1. **Generates message**: Runs `qwen -y` with your git diff to generate a commit message
+2. **Opens editor**: Opens your preferred text editor with the generated message
+3. **Commits**: After you save and close the editor, commits with the message
 
 ## Command-Line Arguments
 

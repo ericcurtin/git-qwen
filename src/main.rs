@@ -41,6 +41,9 @@ fn main() {
     // Check if -a or --all flag is present (commit all tracked modified files)
     let include_all = args.iter().any(|arg| arg == "-a" || arg == "--all");
 
+    // Check if -s or --signoff flag is present
+    let include_signoff = args.iter().any(|arg| arg == "-s" || arg == "--signoff");
+
     // Get git diff to generate commit message
     let diff_output = match get_git_diff(include_all) {
         Ok(output) => output,
@@ -72,7 +75,7 @@ fn main() {
     };
 
     // Create temporary file with the generated message
-    let temp_file = match create_commit_msg_file(&commit_msg) {
+    let temp_file = match create_commit_msg_file(&commit_msg, include_signoff) {
         Ok(path) => path,
         Err(e) => {
             eprintln!("Error: Failed to create temporary file: {}", e);
@@ -186,10 +189,57 @@ fn generate_commit_message(diff: &str) -> Result<String, String> {
     let message = String::from_utf8(output.stdout)
         .map_err(|e| format!("Invalid UTF-8 in qwen output: {}", e))?;
 
+    // Strip markdown code block formatting if present
+    let message = message.trim();
+    let message = message.strip_prefix("```").unwrap_or(message);
+    let message = message.strip_suffix("```").unwrap_or(message);
+    // Also handle if there's a language identifier like ```text
+    let message = if message.starts_with('\n') {
+        &message[1..]
+    } else if let Some(pos) = message.find('\n') {
+        // Check if first line looks like a language identifier (no spaces, short)
+        let first_line = &message[..pos];
+        if !first_line.contains(' ') && first_line.len() < 20 {
+            &message[pos + 1..]
+        } else {
+            message
+        }
+    } else {
+        message
+    };
+
     Ok(message.trim().to_string())
 }
 
-fn create_commit_msg_file(message: &str) -> Result<PathBuf, String> {
+fn get_signoff_line() -> Result<String, String> {
+    let name = Command::new("git")
+        .args(&["config", "user.name"])
+        .output()
+        .map_err(|e| format!("Failed to get user.name: {}", e))?;
+
+    let email = Command::new("git")
+        .args(&["config", "user.email"])
+        .output()
+        .map_err(|e| format!("Failed to get user.email: {}", e))?;
+
+    if !name.status.success() || !email.status.success() {
+        return Err("Failed to get git user config".to_string());
+    }
+
+    let name = String::from_utf8(name.stdout)
+        .map_err(|e| format!("Invalid UTF-8 in user.name: {}", e))?
+        .trim()
+        .to_string();
+
+    let email = String::from_utf8(email.stdout)
+        .map_err(|e| format!("Invalid UTF-8 in user.email: {}", e))?
+        .trim()
+        .to_string();
+
+    Ok(format!("Signed-off-by: {} <{}>", name, email))
+}
+
+fn create_commit_msg_file(message: &str, include_signoff: bool) -> Result<PathBuf, String> {
     let git_dir = Command::new("git")
         .args(&["rev-parse", "--git-dir"])
         .output()
@@ -212,6 +262,13 @@ fn create_commit_msg_file(message: &str) -> Result<PathBuf, String> {
     // Write the generated message
     file.write_all(message.as_bytes())
         .map_err(|e| format!("Failed to write to commit message file: {}", e))?;
+
+    // Add Signed-off-by line if -s flag was used
+    if include_signoff {
+        let signoff = get_signoff_line()?;
+        write!(file, "\n\n{}", signoff)
+            .map_err(|e| format!("Failed to write signoff: {}", e))?;
+    }
 
     // Add git commit template comments
     let status_output = Command::new("git")
