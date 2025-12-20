@@ -4,15 +4,26 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::path::PathBuf;
 
-const QWEN_PROMPT: &str = "Generate a concise git commit message for the following changes. Only output the commit message, nothing else:\n\n";
+const QWEN_PROMPT: &str = "Generate a git commit message for the following changes. Follow these rules strictly:
+1. First line is the subject: max 50 characters, imperative mood, no period at end
+2. Second line must be blank
+3. Body paragraphs start on line 3: wrap all lines at 72 characters
+4. The body should explain WHAT changed and WHY (not how)
+
+Output only the commit message, nothing else:
+
+";
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     
-    // Check if user wants to skip the qwen generation (e.g., --amend, --fixup, etc.)
+    // Check if --amend flag is present (we'll regenerate the message for amend)
+    let is_amend = args.iter().any(|arg| arg == "--amend");
+
+    // Check if user wants to skip the qwen generation (e.g., --fixup, etc.)
     let skip_generation = args.iter().enumerate().any(|(i, arg)| {
         // Flags that don't take values
-        if arg == "--amend" || arg == "--fixup" || arg == "--squash" || 
+        if arg == "--fixup" || arg == "--squash" ||
            arg == "--help" || arg == "-h" || arg == "--version" {
             return true;
         }
@@ -45,7 +56,7 @@ fn main() {
     let include_signoff = args.iter().any(|arg| arg == "-s" || arg == "--signoff");
 
     // Get git diff to generate commit message
-    let diff_output = match get_git_diff(include_all) {
+    let diff_output = match get_git_diff(include_all, is_amend) {
         Ok(output) => output,
         Err(e) => {
             eprintln!("Error: Failed to get git diff: {}", e);
@@ -54,7 +65,10 @@ fn main() {
     };
 
     if diff_output.trim().is_empty() {
-        if include_all {
+        if is_amend {
+            eprintln!("Error: No changes found in HEAD commit.");
+            eprintln!("Cannot generate commit message for an empty commit.");
+        } else if include_all {
             eprintln!("Error: No changes to commit.");
             eprintln!("Nothing to commit (no modified tracked files).");
         } else {
@@ -121,8 +135,54 @@ fn main() {
     execute_git_commit_with_message(&trimmed_msg, &args[1..]);
 }
 
-fn get_git_diff(include_all: bool) -> Result<String, String> {
-    if include_all {
+fn get_git_diff(include_all: bool, is_amend: bool) -> Result<String, String> {
+    if is_amend {
+        // When amending, get the diff of HEAD commit plus any staged/unstaged changes
+        // This shows all changes that will be in the amended commit
+        let head_diff = Command::new("git")
+            .args(&["diff", "HEAD~1", "HEAD"])
+            .output()
+            .map_err(|e| format!("Failed to execute git diff HEAD~1 HEAD: {}", e))?;
+
+        if !head_diff.status.success() {
+            return Err("git diff command failed (is there a parent commit?)".to_string());
+        }
+
+        let head_diff_str = String::from_utf8(head_diff.stdout)
+            .map_err(|e| format!("Invalid UTF-8 in git diff output: {}", e))?;
+
+        // Also get any additional staged changes that will be added to the amend
+        let staged = Command::new("git")
+            .args(&["diff", "--cached"])
+            .output()
+            .map_err(|e| format!("Failed to execute git diff --cached: {}", e))?;
+
+        let staged_str = if staged.status.success() {
+            String::from_utf8(staged.stdout)
+                .map_err(|e| format!("Invalid UTF-8 in git diff output: {}", e))?
+        } else {
+            String::new()
+        };
+
+        // If -a flag is also used, include unstaged changes too
+        let unstaged_str = if include_all {
+            let unstaged = Command::new("git")
+                .args(&["diff"])
+                .output()
+                .map_err(|e| format!("Failed to execute git diff: {}", e))?;
+
+            if unstaged.status.success() {
+                String::from_utf8(unstaged.stdout)
+                    .map_err(|e| format!("Invalid UTF-8 in git diff output: {}", e))?
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        Ok(format!("{}{}{}", head_diff_str, staged_str, unstaged_str))
+    } else if include_all {
         // When -a flag is used, we need to show what would be committed:
         // both staged changes AND unstaged changes to tracked files
         let staged = Command::new("git")
@@ -208,7 +268,89 @@ fn generate_commit_message(diff: &str) -> Result<String, String> {
         message
     };
 
-    Ok(message.trim().to_string())
+    let message = message.trim().to_string();
+    Ok(format_commit_message(&message))
+}
+
+fn format_commit_message(message: &str) -> String {
+    let lines: Vec<&str> = message.lines().collect();
+
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    // Truncate subject line to 50 characters
+    let subject = if lines[0].len() > 50 {
+        &lines[0][..50]
+    } else {
+        lines[0]
+    };
+
+    let mut result = subject.trim_end().to_string();
+
+    // If there's more content, add blank line and wrap body at 72 chars
+    if lines.len() > 1 {
+        // Skip any existing blank lines after subject
+        let body_start = lines.iter().skip(1).position(|l| !l.trim().is_empty());
+
+        if let Some(start_idx) = body_start {
+            result.push_str("\n\n");
+
+            let body_lines = &lines[start_idx + 1..];
+            let body_text = body_lines.join("\n");
+            let wrapped_body = wrap_text(&body_text, 72);
+            result.push_str(&wrapped_body);
+        }
+    }
+
+    result
+}
+
+fn wrap_text(text: &str, max_width: usize) -> String {
+    let mut result = String::new();
+
+    for paragraph in text.split("\n\n") {
+        if !result.is_empty() {
+            result.push_str("\n\n");
+        }
+
+        // Preserve lines that are already short or intentionally formatted
+        let mut wrapped_paragraph = String::new();
+        for line in paragraph.lines() {
+            if !wrapped_paragraph.is_empty() {
+                wrapped_paragraph.push(' ');
+            }
+            wrapped_paragraph.push_str(line.trim());
+        }
+
+        // Now wrap the joined text
+        let words: Vec<&str> = wrapped_paragraph.split_whitespace().collect();
+        let mut current_line = String::new();
+
+        for word in words {
+            if current_line.is_empty() {
+                current_line = word.to_string();
+            } else if current_line.len() + 1 + word.len() <= max_width {
+                current_line.push(' ');
+                current_line.push_str(word);
+            } else {
+                if !result.is_empty() && !result.ends_with("\n\n") {
+                    result.push('\n');
+                }
+                result.push_str(&current_line);
+                current_line = word.to_string();
+            }
+        }
+
+        if !current_line.is_empty() {
+            if !result.is_empty() && !result.ends_with("\n\n") {
+                result.push('\n');
+            }
+            result.push_str(&current_line);
+        }
+    }
+
+    result
 }
 
 fn get_signoff_line() -> Result<String, String> {
