@@ -5,10 +5,10 @@ use std::process::{Command, Stdio};
 use std::path::PathBuf;
 
 const QWEN_PROMPT: &str = "Generate a git commit message for the following changes. Follow these rules strictly:
-1. First line is the subject: max 50 characters, imperative mood, no period at end
+1. First line is the subject: aim for 50 characters max, imperative mood, no period at end. Never truncate words to meet the limit. If a complete word would exceed 50 characters, it is acceptable to go slightly over rather than cut a word short.
 2. Second line must be blank
 3. Body paragraphs start on line 3: wrap all lines at 72 characters
-4. The body should explain WHAT changed and WHY (not how)
+4. The body should explain WHAT changed and WHY (not how). Write in complete sentences. Never use bullet points or dashes to list items.
 
 Output only the commit message, nothing else:
 
@@ -279,12 +279,7 @@ fn format_commit_message(message: &str) -> String {
         return String::new();
     }
 
-    // Truncate subject line to 50 characters
-    let subject = if lines[0].len() > 50 {
-        &lines[0][..50]
-    } else {
-        lines[0]
-    };
+    let subject = lines[0];
 
     let mut result = subject.trim_end().to_string();
 
