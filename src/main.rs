@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use std::path::PathBuf;
 
 const QWEN_PROMPT: &str = "Generate a git commit message for the following changes. Follow these rules strictly:
-1. First line is the subject: aim for 50 characters max, imperative mood, no period at end. Never truncate words to meet the limit. If a complete word would exceed 50 characters, it is acceptable to go slightly over rather than cut a word short.
+1. First line is the subject: aim for 50 characters max, imperative mood, no period at end. Never truncate words to meet the limit. If the line exceeds 50 characters, shorten. We must not exceed 50 characters.
 2. Second line must be blank
 3. Body paragraphs start on line 3: wrap all lines at 72 characters
 4. The body should explain WHAT changed and WHY (not how). Write in complete sentences. Never use bullet points or dashes to list items.
